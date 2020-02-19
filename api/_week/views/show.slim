@@ -1,0 +1,15 @@
+doctype html
+html
+  head
+    title= title
+    css:
+      table {border: solid 1px}
+  body
+    h1= title
+    p Ctrl+A, Ctrl+C で表全体をコピーすると、スプレッドシートに貼り付けることができます。
+    table(border)
+      - @json.each do |j|
+        tr
+          td= j[:date]
+          td= j[:num]
+          td= (I18n.t :week_name)[j[:wday]]

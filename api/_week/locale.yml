@@ -1,0 +1,22 @@
+en:
+  week_name:
+    - Sun
+    - Mon
+    - Tue
+    - Wed
+    - Thu
+    - Fri
+    - Sat
+  title: "The %{num} %{wname} in %{year}"
+  delimiter: ","
+ja:
+  week_name:
+    - 日
+    - 月
+    - 火
+    - 水
+    - 木
+    - 金
+    - 土
+  title: "%{year}年 第%{num} %{wname}曜日"
+  delimiter: 、

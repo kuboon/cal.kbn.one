@@ -1,0 +1,5 @@
+function next(json, hour=9, min=0){
+  return json.find(j=>{
+    return Date.now() < new Date(j.date).setHours(hour,min)
+  })
+}

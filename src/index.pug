@@ -1,0 +1,64 @@
+doctype html
+html
+  head
+    meta(charset="UTF-8")
+    link(rel="stylesheet" href="https://unpkg.com/picnic")
+    style.
+      section { padding: 80px 5% 80px; }
+      .inline select { width: auto; }
+      .inline select:not([multiple]) { padding-right: 35px; }
+      select[multiple] { vertical-align: bottom; height: 2.2em; }
+      select[multiple]:focus { height: auto; }
+
+    title 第Ｎ曜日
+  body
+    nav
+      a.brand(href="#")
+        span 第N曜日
+
+    section.flex.two
+      h1 第2、第4木曜日 みたいなやつ
+      div
+        p 前後1年、計3年分の日付を
+        p HTML テーブル, CSV, JSON で取得できます
+
+    section
+      form(action="/api/week" method="get")
+        .inline
+          select(name="year")
+            option 2018
+            option 2019
+            option(selected) 2020
+            option 2021
+            option 2022
+          | 年 第
+          select(name="num")
+            option 1
+            option 2
+            option 3
+            option 4
+            option 5
+          |、
+          select(name="num2")
+            option
+            option 1
+            option 2
+            option 3
+            option 4
+            option 5
+          select(name="wday")
+            option(value="su") 日 
+            option(value="mo") 月
+            option(value="tu") 火
+            option(value="we") 水
+            option(value="th") 木
+            option(value="fr") 金
+            option(value="sa") 土
+          | 曜日
+        .inline
+          select(name="format")
+            option html
+            option csv
+            option json
+
+          input(type="submit")
