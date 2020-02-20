@@ -41,7 +41,7 @@ rescue => e
 end
 get '/api/week' do
   if params[:num2]
-    nums = params['num'] + params['num2'].yield_self{|n| ",#{n}" unless n=="" }
+    nums = params['num'] + params['num2'].yield_self{|n| n=="" ? n : ",#{n}"  }
     redirect "/api/week/#{params['year']}/#{nums}/#{params['wday']}.#{params['format']}/"
     return
   end
