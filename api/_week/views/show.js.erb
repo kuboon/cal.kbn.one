@@ -1,5 +1,8 @@
-function next(json, hour=9, min=0){
+export const json = <%= @json.to_json %>
+export function next(hour=9, min=0){
   return json.find(j=>{
     return Date.now() < new Date(j.date).setHours(hour,min)
   })
 }
+export default json;
+

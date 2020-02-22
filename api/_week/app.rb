@@ -20,12 +20,17 @@ def main(params)
   @nums = params["num"].split(",").map(&:to_i)
   @wdays = params["wday"].split(",").map{|w| Wdays.index(w)}
   @json = week_array_for_year_around(@year, @wdays, @nums)
+  
+  headers "Cache-Control" => "s-maxage=60, stale-while-revalidate"
   case params["format"]
   when 'json'
     content_type :json
-    headers "Access-Control-Allow-Origin"=>"*",
-            "Cache-Control" => "s-maxage=100, stale-while-revalidate"
+    headers "Access-Control-Allow-Origin"=>"*"
     body @json.to_json
+  when 'js'
+    content_type :js
+    headers "Access-Control-Allow-Origin"=>"*"
+    erb :"show.js"
   when 'csv'
     content_type :txt
     erb :"show.csv"
