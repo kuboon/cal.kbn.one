@@ -1,12 +1,12 @@
 # 第2、第4木曜日 みたいなやつをさっと取れる API
 
-第N曜日API[https://cal.kbn.one]
+第N曜日API https://cal.kbn.one
 
 ## 使い方
 2020年の第2、第4木曜日を知りたいときは、
-https://cal.kbn.one/api/week/2020/2,4/th にアクセス。
-https://cal.kbn.one/api/week/2020/2,4/th.csv や
-https://cal.kbn.one/api/week/2020/2,4/th.json もある。
+- https://cal.kbn.one/api/week/2020/2,4/th にアクセス。
+- https://cal.kbn.one/api/week/2020/2,4/th.csv や
+- https://cal.kbn.one/api/week/2020/2,4/th.json もある。
 
 中身は 2020 年前後1年の合計3年分の該当日付の一覧。
 これを元に、 Javascript で「次の該当日」を取得するには、例えば以下のようにする。
@@ -28,6 +28,17 @@ function fetchData(year){
 fetchData(new Date().getFullYear())
 .then(json=>{
   const j = next(json, 19, 30)
+  const text = `次回は第${j.num}木曜日、${j.date}でーす`
+  document.getElementById("next").innerText = text;
+})
+```
+
+上記関数を組み込み済みの https://cal.kbn.one/api/week/2020/2,4/th.js も用意したので、ブラウザの ```import()``` を使って以下のようにするのが一番簡単です。
+
+```javascript
+import(`https://cal.kbn.one/api/week/${new Date().getFullYear()}/2,4/th.js`)
+.then(m => {
+  const j = m.next(19, 30)
   const text = `次回は第${j.num}木曜日、${j.date}でーす`
   document.getElementById("next").innerText = text;
 })
