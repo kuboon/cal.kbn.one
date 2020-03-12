@@ -1,3 +1,5 @@
+[![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-Ready--to--Code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/kuboon/cal.kbn.one) 
+
 # 第2、第4木曜日 みたいなやつをさっと取れる API
 
 第N曜日API https://cal.kbn.one
