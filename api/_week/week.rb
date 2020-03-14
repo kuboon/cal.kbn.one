@@ -1,3 +1,4 @@
+require 'date'
 module Week
   # returns array of `Date` for 3 years from last to next
   def week_array_for_year_around(year, wdays, nums)
@@ -20,7 +21,10 @@ module Week
       {
         date: d,
         wday: wday,
-        num: num
+        num: num,
+        y: d.year,
+        m: d.month,
+        d: d.day
       }
     end.compact
   end
