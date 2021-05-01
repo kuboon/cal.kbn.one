@@ -6,6 +6,6 @@
     "build": "pug src/index.pug --out public"
   },
   "devDependencies": {
-    "pug-cli": "^1.0.0-alpha6"
+    "pug-cli": "Zikovic/pug-cli"
   }
 }
