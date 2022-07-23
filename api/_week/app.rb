@@ -4,6 +4,7 @@ require_relative 'week'
 require 'sinatra'
 require 'json'
 require 'i18n'
+require 'icalendar'
 include Week
 
 I18n.load_path << File.expand_path("../locale.yml", __FILE__)
@@ -14,6 +15,19 @@ def title
   d = I18n.t :delimiter
   wname = @wdays.map{|w| (I18n.t :week_name)[w]}
   I18n.t :title, year: @year, num: @nums.join(d), wname: wname.join(d) 
+end
+def build_ical
+  # Create a calendar with an event (standard method)
+  cal = Icalendar::Calendar.new
+  @json.each do |j|
+    wday = (I18n.t :week_name)[j[:wday]]
+    cal.event do |e|
+      e.dtstart     = j[:date]
+      e.dtend       = j[:date] + 1
+      e.summary     = "第#{j[:num]} #{wday}曜日"
+    end
+  end
+  cal.to_ical
 end
 def main(params)
   @year = params["year"].to_i
@@ -34,6 +48,8 @@ def main(params)
   when 'csv'
     content_type :txt
     erb :"show.csv"
+  when 'ical'
+    build_ical
   when 'html',nil
     slim :show
   else
@@ -50,10 +66,8 @@ get '/api/week' do
     redirect "/api/week/#{params['year']}/#{nums}/#{params['wday']}.#{params['format']}/"
     return
   end
-  puts "params redirect"
   main(params)
 end
 get '/api/week/:year/:num/:wday(.:format)?', provides: %w[html csv json] do
-  puts "full path"
   main(params)
 end

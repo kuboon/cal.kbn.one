@@ -28,4 +28,11 @@ RSpec.describe do
       is_expected.to start_with "<!DOCTYPE html><html><head><title>2020年 第2、4 木曜日</title>"
     end
   end
+  context "/2020/2,4/th.ical" do
+    subject { last_response.body }
+    it do
+      get ROOT + "/2020/2,4/th.ical"
+      is_expected.to start_with "BEGIN:VCALENDAR"
+    end
+  end
 end
