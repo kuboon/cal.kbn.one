@@ -3,10 +3,9 @@
   "env": {},
   "functions": {
     "api/*.ru": {
-      "runtime": "@now/ruby@1.0.1"
+      "runtime": "@vercel/ruby@1.3.16"
     }
   },
-  "regions": ["hnd1"],
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
