@@ -32,6 +32,7 @@ RSpec.describe do
     subject { last_response.body }
     it do
       get ROOT + "/2020/2,4/th.ical"
+      puts subject
       is_expected.to start_with "BEGIN:VCALENDAR"
     end
   end

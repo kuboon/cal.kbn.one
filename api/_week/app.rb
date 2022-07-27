@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 require_relative 'week'
 
+require 'active_support/time_with_zone'
 require 'sinatra'
 require 'json'
 require 'i18n'
@@ -21,9 +22,10 @@ def build_ical
   cal = Icalendar::Calendar.new
   @json.each do |j|
     wday = (I18n.t :week_name)[j[:wday]]
+    d = j[:date].to_time.in_time_zone("Asia/Tokyo")
     cal.event do |e|
-      e.dtstart     = j[:date]
-      e.dtend       = j[:date] + 1
+      e.dtstart     = d
+      e.duration    = "1D"
       e.summary     = "第#{j[:num]} #{wday}曜日"
     end
   end
