@@ -22,7 +22,7 @@ def build_ical
   cal = Icalendar::Calendar.new
   @json.each do |j|
     wday = (I18n.t :week_name)[j[:wday]]
-    d = j[:date].to_time.in_time_zone("Asia/Tokyo")
+    d = j[:date].in_time_zone("Asia/Tokyo").to_time
     cal.event do |e|
       e.dtstart     = d
       e.duration    = "1D"
