@@ -20,6 +20,7 @@ end
 def build_ical
   # Create a calendar with an event (standard method)
   cal = Icalendar::Calendar.new
+  cal.ip_name = title
   @json.each do |j|
     wday = (I18n.t :week_name)[j[:wday]]
     d = j[:date].in_time_zone("Asia/Tokyo").to_time
