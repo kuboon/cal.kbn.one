@@ -12,23 +12,23 @@
 これを元に、 Javascript で「次の該当日」を取得するには、例えば以下のようにする。
 
 ```javascript
-function next(json, hour=9, min=0){
-  const now = Date.now()
-  return json.find(j => now < new Date(j.date).setHours(hour,min))
-}
 function fetchData(year){
   return new Promise((resolve, reject)=>{
     fetch(`https://cal.kbn.one/api/week/${year}/2,4/th.json`)
-    .then(res=>res.text())
+    .then(res=>res.json())
     .then(resolve)
     .catch(reject)
   })
 }
+function next(json){
+  const now = Date.now()
+  return json.find(j => now < new Date(j.date).setHours(19, 30))
+}
 
 fetchData(new Date().getFullYear())
 .then(json=>{
-  const j = next(json, 19, 30)
-  const text = `次回は第${j.num}木曜日、${j.date}でーす`
+  const j = next(json)
+  const text = `次回は${j.m}月第${j.num}木曜日、${j.d}日でーす`
   document.getElementById("next").innerText = text;
 })
 ```
@@ -39,7 +39,7 @@ fetchData(new Date().getFullYear())
 import(`https://cal.kbn.one/api/week/${new Date().getFullYear()}/2,4/th.js`)
 .then(m => {
   const j = m.next(19, 30)
-  const text = `次回は第${j.num}木曜日、${j.date}でーす`
+  const text = `次回は${j.m}月第${j.num}木曜日、${j.d}日でーす`
   document.getElementById("next").innerText = text;
 })
 ```

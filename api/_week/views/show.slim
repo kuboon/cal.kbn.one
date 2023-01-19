@@ -4,9 +4,22 @@ html
     title= title
     css:
       table {border: solid 1px}
+    javascript:
+      function copyTable(){
+        const t=document.querySelector("table")
+        t.select()
+        t.setSelectionRange(0, 99999)
+        document.execCommand('copy')
+      }
   body
     h1= title
-    p Ctrl+A, Ctrl+C で表全体をコピーすると、スプレッドシートに貼り付けることができます。
+    p
+      a href=request.url+".json" json
+      | |
+      a href=request.url+".csv" csv
+    p 
+      button onclick="copyTable"
+      | 表全体をコピーすると、スプレッドシートに貼り付けることができます。
     table(border)
       - @json.each do |j|
         tr
