@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 require_relative 'week'
 
+require 'active_support'
 require 'active_support/time_with_zone'
 require 'sinatra'
 require 'json'

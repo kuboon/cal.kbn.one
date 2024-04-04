@@ -1,6 +1,6 @@
 ENV['APP_ENV'] = 'test'
 
-require_relative 'app'
+require_relative '../_week/app'
 require 'rack/test'
 
 RSpec.configure do |c|
@@ -32,7 +32,6 @@ RSpec.describe do
     subject { last_response.body }
     it do
       get ROOT + "/2020/2,4/th.ical"
-      puts subject
       is_expected.to start_with "BEGIN:VCALENDAR"
     end
   end

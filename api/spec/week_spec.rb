@@ -1,4 +1,4 @@
-require_relative 'week'
+require_relative '../_week/week'
 include Week
 
 RSpec.describe do
