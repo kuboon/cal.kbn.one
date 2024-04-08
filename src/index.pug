@@ -26,13 +26,11 @@ html
       form(action="/api/week" method="get")
         .inline
           select(name="year")
-            option 2019
-            option 2020
-            option 2021
-            option(selected) 2022
+            option 2022
             option 2023
-            option 2024
+            option(selected) 2024
             option 2025
+            option 2026
           | 年 第
           select(name="num")
             option 1
@@ -64,5 +62,15 @@ html
             option json
             option js
             option ical
+        .inline
+          label
+            | ical 予定名
+            input(name="summary")
+          label
+            | ical 開始時刻
+            input(name="start_at" value="8:00")
+          label
+            | ical 終了時刻
+            input(name="end_at" value="8:00")
 
           input(type="submit")

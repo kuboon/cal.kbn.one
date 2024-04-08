@@ -18,17 +18,26 @@ def title
   wname = @wdays.map{|w| (I18n.t :week_name)[w]}
   I18n.t :title, year: @year, num: @nums.join(d), wname: wname.join(d) 
 end
-def build_ical
+def seconds_from_time_str(str)
+  return 0 if str.nil?
+  hour, min = str.split(":")
+  hour.to_i * 60 * 60 + min.to_i * 60
+end
+def build_ical(opts)
   # Create a calendar with an event (standard method)
   cal = Icalendar::Calendar.new
   cal.ip_name = title
   @json.each do |j|
     wday = (I18n.t :week_name)[j[:wday]]
-    d = j[:date].in_time_zone("Asia/Tokyo").to_time
+    d = j[:date].to_time
     cal.event do |e|
-      e.dtstart     = d
-      e.duration    = "1D"
-      e.summary     = "第#{j[:num]} #{wday}曜日"
+      e.dtstart     = d + seconds_from_time_str(opts["start_at"])
+      if opts["end_at"]
+        e.dtend = d + seconds_from_time_str(opts["end_at"])
+      else
+        e.duration    = "1D"
+      end
+      e.summary     = opts["summary"] || "第#{j[:num]} #{wday}曜日"
     end
   end
   cal.to_ical
@@ -53,7 +62,7 @@ def main(params)
     content_type :txt
     erb :"show.csv"
   when 'ical'
-    build_ical
+    build_ical(params.slice("summary", "start_at", "end_at"))
   when 'html',nil
     slim :show
   else
@@ -67,7 +76,10 @@ end
 get '/api/week' do
   if params[:num2]
     nums = params['num'] + params['num2'].yield_self{|n| n=="" ? n : ",#{n}"  }
-    redirect "/api/week/#{params['year']}/#{nums}/#{params['wday']}.#{params['format']}/"
+    path = "/api/week/#{params['year']}/#{nums}/#{params['wday']}.#{params['format']}"
+    opts = params.slice("summary", "start_at", "end_at").select{|_, v| v && !v.empty? }
+    path += "?#{opts.to_query}" unless opts.empty?
+    redirect path
     return
   end
   main(params)
