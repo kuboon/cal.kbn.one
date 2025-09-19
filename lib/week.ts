@@ -1,7 +1,5 @@
-import { VercelRequest, VercelResponse } from '@vercel/node';
-
 const WDAYS = ['su', 'mo', 'tu', 'we', 'th', 'fr', 'sa'] as const;
-const WEEK_NAME_JA: Record<typeof WDAYS[number], string> = {
+const WEEK_NAME_JA: Record<(typeof WDAYS)[number], string> = {
   su: '日',
   mo: '月',
   tu: '火',
@@ -11,9 +9,11 @@ const WEEK_NAME_JA: Record<typeof WDAYS[number], string> = {
   sa: '土',
 };
 
-type Format = 'html' | 'csv' | 'json' | 'js' | 'ical';
+const CACHE_CONTROL_VALUE = 's-maxage=60, stale-while-revalidate';
 
-type WeekEntry = {
+export type Format = 'html' | 'csv' | 'json' | 'js' | 'ical';
+
+export type WeekEntry = {
   date: string;
   wday: number;
   num: number;
@@ -22,7 +22,7 @@ type WeekEntry = {
   d: number;
 };
 
-type WeekOptions = {
+export type WeekOptions = {
   year: number;
   nums: number[];
   wdays: number[];
@@ -36,7 +36,16 @@ type ParsedRequest = WeekOptions & {
   num2?: string;
 };
 
-const CACHE_CONTROL_VALUE = 's-maxage=60, stale-while-revalidate';
+export type WeekHandlerRequest = {
+  query: Record<string, string | string[] | undefined>;
+  slugSegments?: string[];
+};
+
+export type WeekHandlerResponse = {
+  status: number;
+  headers?: Record<string, string>;
+  body?: string;
+};
 
 function pad(value: number): string {
   return value.toString().padStart(2, '0');
@@ -57,10 +66,9 @@ function parseFormatFromWday(raw: string): { wday: string; format?: Format } {
 }
 
 function parseRequest(
-  req: VercelRequest,
+  query: Record<string, string | string[] | undefined>,
   slugSegments: string[] = [],
 ): ParsedRequest | { redirectTo: string; cacheControl: string } | undefined {
-  const query = req.query;
   const yearParam = normalizeArrayParam(query.year);
   const numParam = normalizeArrayParam(query.num);
   const num2Param = normalizeArrayParam(query.num2);
@@ -104,7 +112,7 @@ function parseRequest(
 
   const wdays = wdayStr
     .split(',')
-    .map((token) => WDAYS.indexOf(token as typeof WDAYS[number]))
+    .map((token) => WDAYS.indexOf(token as (typeof WDAYS)[number]))
     .filter((index) => index >= 0);
 
   if (wdays.length === 0) {
@@ -126,9 +134,7 @@ function parseRequest(
     if (endAt) params.set('end_at', endAt);
     const suffix = formatParam ? `.${formatParam}` : '';
     const querySuffix = params.toString();
-    const location = `/api/week/${yearStr}/${mergedNum}/${wdayStr}${suffix}${
-      querySuffix ? `?${querySuffix}` : ''
-    }`;
+    const location = `/api/week/${yearStr}/${mergedNum}/${wdayStr}${suffix}${querySuffix ? `?${querySuffix}` : ''}`;
     return { redirectTo: location, cacheControl: CACHE_CONTROL_VALUE };
   }
 
@@ -263,61 +269,90 @@ function buildHtml(entries: WeekEntry[], title: string): string {
   return `<!doctype html><html><head><title>${title}</title><style>table {border: solid 1px}</style></head><body><h1>${title}</h1><p>Ctrl+A, Ctrl+C で表全体をコピーすると、スプレッドシートに貼り付けることができます。</p><table border>${rows}</table></body></html>`;
 }
 
-export async function handleWeekRequest(
-  req: VercelRequest,
-  res: VercelResponse,
-  slugSegments: string[] = [],
-): Promise<void> {
-  const parsed = parseRequest(req, slugSegments);
+export function handleWeekRequest({ query, slugSegments = [] }: WeekHandlerRequest): WeekHandlerResponse {
+  const parsed = parseRequest(query, slugSegments);
 
   if (!parsed) {
-    res.status(404).send("<script>console.log('error')</script>");
-    return;
+    return {
+      status: 404,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      body: "<script>console.log('error')</script>",
+    };
   }
 
   if ('redirectTo' in parsed) {
-    res.status(302).setHeader('Cache-Control', parsed.cacheControl);
-    res.setHeader('Location', parsed.redirectTo);
-    res.end();
-    return;
+    return {
+      status: 302,
+      headers: {
+        'Cache-Control': parsed.cacheControl,
+        Location: parsed.redirectTo,
+      },
+    };
   }
 
   const { format, year, nums, wdays } = parsed;
   const entries = weekArrayForYearAround(year, wdays, nums);
   const title = buildTitle(year, nums, wdays);
 
-  res.setHeader('Cache-Control', CACHE_CONTROL_VALUE);
+  const baseHeaders: Record<string, string> = {
+    'Cache-Control': CACHE_CONTROL_VALUE,
+  };
 
   switch (format) {
-    case 'json': {
-      res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.status(200).send(JSON.stringify(entries));
-      return;
-    }
-    case 'js': {
-      res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.status(200).send(buildJs(entries));
-      return;
-    }
-    case 'csv': {
-      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      res.status(200).send(buildCsv(entries));
-      return;
-    }
-    case 'ical': {
-      res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
-      res.status(200).send(buildIcal(entries, parsed, title));
-      return;
-    }
-    case 'html': {
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.status(200).send(buildHtml(entries, title));
-      return;
-    }
-    default: {
-      res.status(404).send("<script>console.log('error')</script>");
-    }
+    case 'json':
+      return {
+        status: 200,
+        headers: {
+          ...baseHeaders,
+          'Content-Type': 'application/json; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify(entries),
+      };
+    case 'js':
+      return {
+        status: 200,
+        headers: {
+          ...baseHeaders,
+          'Content-Type': 'application/javascript; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: buildJs(entries),
+      };
+    case 'csv':
+      return {
+        status: 200,
+        headers: {
+          ...baseHeaders,
+          'Content-Type': 'text/plain; charset=utf-8',
+        },
+        body: buildCsv(entries),
+      };
+    case 'ical':
+      return {
+        status: 200,
+        headers: {
+          ...baseHeaders,
+          'Content-Type': 'text/calendar; charset=utf-8',
+        },
+        body: buildIcal(entries, parsed, title),
+      };
+    case 'html':
+      return {
+        status: 200,
+        headers: {
+          ...baseHeaders,
+          'Content-Type': 'text/html; charset=utf-8',
+        },
+        body: buildHtml(entries, title),
+      };
+    default:
+      return {
+        status: 404,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        body: "<script>console.log('error')</script>",
+      };
   }
 }
+
+export { buildCsv, buildHtml, buildIcal, buildJs, buildTitle, weekArrayForYearAround };
