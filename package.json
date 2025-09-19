@@ -2,10 +2,14 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "test": "cd api; bundle exec rspec .",
-    "build": "pug src/index.pug --out public"
+    "test": "npm run typecheck",
+    "build": "pug src/index.pug --out public",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "pug-cli": "Zikovic/pug-cli"
+    "@types/node": "^20.12.7",
+    "@vercel/node": "^3.2.20",
+    "pug-cli": "https://codeload.github.com/Zikovic/pug-cli/tar.gz/d39571d206ad2e83e0f98a423067f8f8613a7ed3",
+    "typescript": "^5.4.5"
   }
 }
