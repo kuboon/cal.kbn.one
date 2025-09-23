@@ -9,7 +9,7 @@
   "devDependencies": {
     "@types/node": "^20.12.7",
     "@vercel/node": "^3.2.20",
-    "pug-cli": "https://codeload.github.com/Zikovic/pug-cli/tar.gz/d39571d206ad2e83e0f98a423067f8f8613a7ed3",
+    "pug-cli": "^1.0.0-alpha6",
     "typescript": "^5.4.5"
   }
 }
