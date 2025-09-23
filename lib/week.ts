@@ -249,7 +249,7 @@ function buildIcal(entries: WeekEntry[], options: WeekOptions, title: string): s
 function buildCsv(entries: WeekEntry[]): string {
   const lines = ['date,wday,num'];
   for (const entry of entries) {
-    lines.push(`${entry.date}, ${entry.wday}, ${entry.num}`);
+    lines.push(`${entry.date},${entry.wday},${entry.num}`);
   }
   return `${lines.join('\n')}\n`;
 }
