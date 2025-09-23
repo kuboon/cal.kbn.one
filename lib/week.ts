@@ -11,6 +11,18 @@ const WEEK_NAME_JA: Record<(typeof WDAYS)[number], string> = {
 
 const CACHE_CONTROL_VALUE = 's-maxage=60, stale-while-revalidate';
 
+const RESOLVED_ICAL_TIMEZONE = (() => {
+  const explicit = process.env.WEEK_ICAL_TZ ?? process.env.TZ;
+  if (explicit && explicit !== 'UTC') {
+    return explicit;
+  }
+  const { timeZone } = Intl.DateTimeFormat().resolvedOptions();
+  if (timeZone && timeZone !== 'UTC') {
+    return timeZone;
+  }
+  return undefined;
+})();
+
 export type Format = 'html' | 'csv' | 'json' | 'js' | 'ical';
 
 export type WeekEntry = {
@@ -49,6 +61,25 @@ export type WeekHandlerResponse = {
 
 function pad(value: number): string {
   return value.toString().padStart(2, '0');
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case "'":
+        return '&#39;';
+      default:
+        return char;
+    }
+  });
 }
 
 function normalizeArrayParam(value?: string | string[]): string | undefined {
@@ -212,30 +243,42 @@ function addSeconds(date: Date, seconds: number): Date {
 
 function formatDateTimeForIcal(date: Date): string {
   return (
-    date.getUTCFullYear().toString() +
-    pad(date.getUTCMonth() + 1) +
-    pad(date.getUTCDate()) +
+    date.getFullYear().toString() +
+    pad(date.getMonth() + 1) +
+    pad(date.getDate()) +
     'T' +
-    pad(date.getUTCHours()) +
-    pad(date.getUTCMinutes()) +
-    pad(date.getUTCSeconds()) +
-    'Z'
+    pad(date.getHours()) +
+    pad(date.getMinutes()) +
+    pad(date.getSeconds())
   );
 }
 
 function buildIcal(entries: WeekEntry[], options: WeekOptions, title: string): string {
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//cal.kbn.one//week//JA', `NAME:${title}`, `X-WR-CALNAME:${title}`];
+  const lines = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//cal.kbn.one//week//JA',
+    `NAME:${title}`,
+    `X-WR-CALNAME:${title}`,
+  ];
+  if (RESOLVED_ICAL_TIMEZONE) {
+    lines.push(`X-WR-TIMEZONE:${RESOLVED_ICAL_TIMEZONE}`);
+  }
   for (const entry of entries) {
-    const baseDate = new Date(Date.UTC(entry.y, entry.m - 1, entry.d));
+    const baseDate = new Date(entry.y, entry.m - 1, entry.d);
     const startSeconds = secondsFromTimeStr(options.startAt);
     const endSeconds = secondsFromTimeStr(options.endAt);
     const startDate = addSeconds(baseDate, startSeconds);
     const eventSummary = options.summary ?? `第${entry.num} ${WEEK_NAME_JA[WDAYS[entry.wday]]}曜日`;
     lines.push('BEGIN:VEVENT');
-    lines.push(`DTSTART:${formatDateTimeForIcal(startDate)}`);
+    const dtStartPrefix = RESOLVED_ICAL_TIMEZONE
+      ? `DTSTART;TZID=${RESOLVED_ICAL_TIMEZONE}:`
+      : 'DTSTART:';
+    lines.push(`${dtStartPrefix}${formatDateTimeForIcal(startDate)}`);
     if (options.endAt) {
       const endDate = addSeconds(baseDate, endSeconds);
-      lines.push(`DTEND:${formatDateTimeForIcal(endDate)}`);
+      const dtEndPrefix = RESOLVED_ICAL_TIMEZONE ? `DTEND;TZID=${RESOLVED_ICAL_TIMEZONE}:` : 'DTEND:';
+      lines.push(`${dtEndPrefix}${formatDateTimeForIcal(endDate)}`);
     } else {
       lines.push('DURATION:P1D');
     }
@@ -260,13 +303,14 @@ function buildJs(entries: WeekEntry[]): string {
 }
 
 function buildHtml(entries: WeekEntry[], title: string): string {
+  const escapedTitle = escapeHtml(title);
   const rows = entries
     .map(
       (entry) =>
         `<tr><td>${entry.date}</td><td>${entry.num}</td><td>${WEEK_NAME_JA[WDAYS[entry.wday]]}</td></tr>`,
     )
     .join('');
-  return `<!doctype html><html><head><title>${title}</title><style>table {border: solid 1px}</style></head><body><h1>${title}</h1><p>Ctrl+A, Ctrl+C で表全体をコピーすると、スプレッドシートに貼り付けることができます。</p><table border>${rows}</table></body></html>`;
+  return `<!doctype html><html><head><title>${escapedTitle}</title><style>table {border: solid 1px}</style></head><body><h1>${escapedTitle}</h1><p>Ctrl+A, Ctrl+C で表全体をコピーすると、スプレッドシートに貼り付けることができます。</p><table border>${rows}</table></body></html>`;
 }
 
 export function handleWeekRequest({ query, slugSegments = [] }: WeekHandlerRequest): WeekHandlerResponse {
