@@ -1,3 +1,5 @@
+import ICAL from 'ical.js';
+
 const WDAYS = ['su', 'mo', 'tu', 'we', 'th', 'fr', 'sa'] as const;
 const WEEK_NAME_JA: Record<(typeof WDAYS)[number], string> = {
   su: '日',
@@ -58,6 +60,10 @@ export type WeekHandlerResponse = {
   headers?: Record<string, string>;
   body?: string;
 };
+
+type JCalProperty = [string, Record<string, string>, string, string];
+type JCalComponent = [string, JCalProperty[], JCalComponent[]];
+type JCalData = [string, JCalProperty[], JCalComponent[]];
 
 function pad(value: number): string {
   return value.toString().padStart(2, '0');
@@ -241,52 +247,56 @@ function addSeconds(date: Date, seconds: number): Date {
   return new Date(date.getTime() + seconds * 1000);
 }
 
-function formatDateTimeForIcal(date: Date): string {
+function formatDateTimeForJcal(date: Date): string {
   return (
-    date.getFullYear().toString() +
-    pad(date.getMonth() + 1) +
-    pad(date.getDate()) +
-    'T' +
-    pad(date.getHours()) +
-    pad(date.getMinutes()) +
+    `${date.getFullYear()}-` +
+    `${pad(date.getMonth() + 1)}-` +
+    `${pad(date.getDate())}T` +
+    `${pad(date.getHours())}:` +
+    `${pad(date.getMinutes())}:` +
     pad(date.getSeconds())
   );
 }
 
 function buildIcal(entries: WeekEntry[], options: WeekOptions, title: string): string {
-  const lines = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//cal.kbn.one//week//JA',
-    `NAME:${title}`,
-    `X-WR-CALNAME:${title}`,
+  const calendarProperties: JCalProperty[] = [
+    ['prodid', {}, 'text', '-//cal.kbn.one//week//JA'],
+    ['version', {}, 'text', '2.0'],
+    ['name', {}, 'text', title],
+    ['x-wr-calname', {}, 'text', title],
   ];
   if (RESOLVED_ICAL_TIMEZONE) {
-    lines.push(`X-WR-TIMEZONE:${RESOLVED_ICAL_TIMEZONE}`);
+    calendarProperties.push(['x-wr-timezone', {}, 'text', RESOLVED_ICAL_TIMEZONE]);
   }
-  for (const entry of entries) {
+
+  const startSeconds = secondsFromTimeStr(options.startAt);
+  const endSeconds = secondsFromTimeStr(options.endAt);
+
+  const components: JCalComponent[] = entries.map((entry) => {
     const baseDate = new Date(entry.y, entry.m - 1, entry.d);
-    const startSeconds = secondsFromTimeStr(options.startAt);
-    const endSeconds = secondsFromTimeStr(options.endAt);
     const startDate = addSeconds(baseDate, startSeconds);
     const eventSummary = options.summary ?? `第${entry.num} ${WEEK_NAME_JA[WDAYS[entry.wday]]}曜日`;
-    lines.push('BEGIN:VEVENT');
-    const dtStartPrefix = RESOLVED_ICAL_TIMEZONE
-      ? `DTSTART;TZID=${RESOLVED_ICAL_TIMEZONE}:`
-      : 'DTSTART:';
-    lines.push(`${dtStartPrefix}${formatDateTimeForIcal(startDate)}`);
+
+    const eventProperties: JCalProperty[] = [];
+    const tzParams = RESOLVED_ICAL_TIMEZONE ? { tzid: RESOLVED_ICAL_TIMEZONE } : undefined;
+
+    eventProperties.push(['dtstart', tzParams ? { ...tzParams } : {}, 'date-time', formatDateTimeForJcal(startDate)]);
+
     if (options.endAt) {
       const endDate = addSeconds(baseDate, endSeconds);
-      const dtEndPrefix = RESOLVED_ICAL_TIMEZONE ? `DTEND;TZID=${RESOLVED_ICAL_TIMEZONE}:` : 'DTEND:';
-      lines.push(`${dtEndPrefix}${formatDateTimeForIcal(endDate)}`);
+      eventProperties.push(['dtend', tzParams ? { ...tzParams } : {}, 'date-time', formatDateTimeForJcal(endDate)]);
     } else {
-      lines.push('DURATION:P1D');
+      eventProperties.push(['duration', {}, 'duration', 'P1D']);
     }
-    lines.push(`SUMMARY:${eventSummary}`);
-    lines.push('END:VEVENT');
-  }
-  lines.push('END:VCALENDAR');
-  return lines.join('\r\n');
+
+    eventProperties.push(['summary', {}, 'text', eventSummary]);
+
+    return ['vevent', eventProperties, []];
+  });
+
+  const jCal: JCalData = ['vcalendar', calendarProperties, components];
+  const component = ICAL.Component.fromJSON(jCal);
+  return component.toString();
 }
 
 function buildCsv(entries: WeekEntry[]): string {
