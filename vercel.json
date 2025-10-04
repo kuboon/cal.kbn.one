@@ -2,5 +2,9 @@
   "version": 2,
   "env": {},
   "cleanUrls": true,
-  "trailingSlash": false
+  "trailingSlash": false,
+  "rewrites": [
+    { "source": "/api/week/:year/:num/:wday", "destination": "/api/week" },
+    { "source": "/api/week/:year/:num/:wday(.:format)?", "destination": "/api/week" }
+  ]
 }
