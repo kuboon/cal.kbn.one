@@ -297,7 +297,7 @@ function buildIcal(entries: WeekEntry[], options: WeekOptions, title: string): s
   });
 
   const jCal: JCalData = ['vcalendar', calendarProperties, components];
-  const component = ICAL.Component.fromJSON(jCal);
+  const component = new ICAL.Component(jCal);
   return component.toString();
 }
 
