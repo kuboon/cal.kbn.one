@@ -1,0 +1,412 @@
+import ICAL from 'ical.js';
+
+const WDAYS = ['su', 'mo', 'tu', 'we', 'th', 'fr', 'sa'] as const;
+const WEEK_NAME_JA: Record<(typeof WDAYS)[number], string> = {
+  su: '日',
+  mo: '月',
+  tu: '火',
+  we: '水',
+  th: '木',
+  fr: '金',
+  sa: '土',
+};
+
+const CACHE_CONTROL_VALUE = 's-maxage=60, stale-while-revalidate';
+
+const RESOLVED_ICAL_TIMEZONE = (() => {
+  const explicit = process.env.WEEK_ICAL_TZ ?? process.env.TZ;
+  if (explicit && explicit !== 'UTC') {
+    return explicit;
+  }
+  const { timeZone } = Intl.DateTimeFormat().resolvedOptions();
+  if (timeZone && timeZone !== 'UTC') {
+    return timeZone;
+  }
+  return undefined;
+})();
+
+export type Format = 'html' | 'csv' | 'json' | 'js' | 'ical';
+
+export type WeekEntry = {
+  date: string;
+  wday: number;
+  num: number;
+  y: number;
+  m: number;
+  d: number;
+};
+
+export type WeekOptions = {
+  year: number;
+  nums: number[];
+  wdays: number[];
+  format: Format;
+  summary?: string;
+  startAt?: string;
+  endAt?: string;
+};
+
+type ParsedRequest = WeekOptions & {
+  num2?: string;
+};
+
+export type WeekHandlerRequest = {
+  query: Record<string, string | string[] | undefined>;
+  slugSegments?: string[];
+};
+
+export type WeekHandlerResponse = {
+  status: number;
+  headers?: Record<string, string>;
+  body?: string;
+};
+
+type JCalProperty = [string, Record<string, string>, string, string];
+type JCalComponent = [string, JCalProperty[], JCalComponent[]];
+type JCalData = [string, JCalProperty[], JCalComponent[]];
+
+function pad(value: number): string {
+  return value.toString().padStart(2, '0');
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => {
+    switch (char) {
+      case '&':
+        return '&amp;';
+      case '<':
+        return '&lt;';
+      case '>':
+        return '&gt;';
+      case '"':
+        return '&quot;';
+      case "'":
+        return '&#39;';
+      default:
+        return char;
+    }
+  });
+}
+
+function normalizeArrayParam(value?: string | string[]): string | undefined {
+  if (!value) return undefined;
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value;
+}
+
+function parseFormatFromWday(raw: string): { wday: string; format?: Format } {
+  const [wday, ...rest] = raw.split('.');
+  const format = rest.length > 0 ? (rest.pop() as Format) : undefined;
+  return { wday, format };
+}
+
+function parseRequest(
+  query: Record<string, string | string[] | undefined>,
+  slugSegments: string[] = [],
+): ParsedRequest | { redirectTo: string; cacheControl: string } | undefined {
+  const yearParam = normalizeArrayParam(query.year);
+  const numParam = normalizeArrayParam(query.num);
+  const num2Param = normalizeArrayParam(query.num2);
+  const wdayParam = normalizeArrayParam(query.wday);
+  let formatParam = normalizeArrayParam(query.format) as Format | undefined;
+
+  const [slugYear, slugNum, slugWdayRaw] = slugSegments;
+  let yearStr = yearParam ?? slugYear;
+  let numStr = numParam ?? slugNum;
+  let wdayStr = wdayParam ?? slugWdayRaw;
+
+  if (wdayStr && wdayStr.includes('.')) {
+    const { wday, format } = parseFormatFromWday(wdayStr);
+    wdayStr = wday;
+    if (!formatParam && format && isFormat(format)) {
+      formatParam = format;
+    }
+  }
+
+  if (!formatParam) {
+    formatParam = 'html';
+  }
+
+  if (!yearStr || !numStr || !wdayStr) {
+    return undefined;
+  }
+
+  const year = Number(yearStr);
+  if (!Number.isFinite(year)) {
+    return undefined;
+  }
+
+  const nums = numStr
+    .split(',')
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0);
+
+  if (nums.length === 0) {
+    return undefined;
+  }
+
+  const wdays = wdayStr
+    .split(',')
+    .map((token) => WDAYS.indexOf(token as (typeof WDAYS)[number]))
+    .filter((index) => index >= 0);
+
+  if (wdays.length === 0) {
+    return undefined;
+  }
+
+  if (!isFormat(formatParam)) {
+    return undefined;
+  }
+
+  if (typeof num2Param === 'string') {
+    const mergedNum = [numStr, num2Param].filter((value) => value !== '').join(',');
+    const params = new URLSearchParams();
+    const summary = normalizeArrayParam(query.summary);
+    const startAt = normalizeArrayParam(query.start_at);
+    const endAt = normalizeArrayParam(query.end_at);
+    if (summary) params.set('summary', summary);
+    if (startAt) params.set('start_at', startAt);
+    if (endAt) params.set('end_at', endAt);
+    const suffix = formatParam ? `.${formatParam}` : '';
+    const querySuffix = params.toString();
+    const location = `/api/week/${yearStr}/${mergedNum}/${wdayStr}${suffix}${querySuffix ? `?${querySuffix}` : ''}`;
+    return { redirectTo: location, cacheControl: CACHE_CONTROL_VALUE };
+  }
+
+  return {
+    year,
+    nums,
+    wdays,
+    format: formatParam,
+    summary: normalizeArrayParam(query.summary),
+    startAt: normalizeArrayParam(query.start_at),
+    endAt: normalizeArrayParam(query.end_at),
+  };
+}
+
+function isFormat(format: string | undefined): format is Format {
+  return format === 'html' || format === 'csv' || format === 'json' || format === 'js' || format === 'ical';
+}
+
+function subset(year: number, wday: number, num: number): WeekEntry[] {
+  const entries: WeekEntry[] = [];
+  for (let month = 1; month <= 12; month += 1) {
+    const firstDay = new Date(Date.UTC(year, month - 1, 1));
+    const firstDayWday = firstDay.getUTCDay();
+    const offset = (wday - firstDayWday + 7) % 7;
+    const day = 1 + offset + 7 * (num - 1);
+    const lastDayOfMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    if (day > lastDayOfMonth) {
+      continue;
+    }
+    const date = new Date(Date.UTC(year, month - 1, day));
+    entries.push({
+      date: `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`,
+      wday,
+      num,
+      y: date.getUTCFullYear(),
+      m: date.getUTCMonth() + 1,
+      d: date.getUTCDate(),
+    });
+  }
+  return entries;
+}
+
+function weekArrayForYearAround(year: number, wdays: number[], nums: number[]): WeekEntry[] {
+  const entries: WeekEntry[] = [];
+  for (const wday of wdays) {
+    for (const num of nums) {
+      entries.push(...subset(year - 1, wday, num));
+      entries.push(...subset(year, wday, num));
+      entries.push(...subset(year + 1, wday, num));
+    }
+  }
+  return entries.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+function buildTitle(year: number, nums: number[], wdays: number[]): string {
+  const delimiter = '、';
+  const numText = nums.join(delimiter);
+  const names = wdays.map((wday) => WEEK_NAME_JA[WDAYS[wday]]);
+  const nameText = names.join(delimiter);
+  return `${year}年 第${numText} ${nameText}曜日`;
+}
+
+function secondsFromTimeStr(value?: string): number {
+  if (!value) return 0;
+  const [hour, minute] = value.split(':');
+  const h = Number(hour);
+  const m = Number(minute);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return 0;
+  return h * 60 * 60 + m * 60;
+}
+
+function addSeconds(date: Date, seconds: number): Date {
+  return new Date(date.getTime() + seconds * 1000);
+}
+
+function formatDateTimeForJcal(date: Date): string {
+  return (
+    `${date.getFullYear()}-` +
+    `${pad(date.getMonth() + 1)}-` +
+    `${pad(date.getDate())}T` +
+    `${pad(date.getHours())}:` +
+    `${pad(date.getMinutes())}:` +
+    pad(date.getSeconds())
+  );
+}
+
+function buildIcal(entries: WeekEntry[], options: WeekOptions, title: string): string {
+  const calendarProperties: JCalProperty[] = [
+    ['prodid', {}, 'text', '-//cal.kbn.one//week//JA'],
+    ['version', {}, 'text', '2.0'],
+    ['name', {}, 'text', title],
+    ['x-wr-calname', {}, 'text', title],
+  ];
+  if (RESOLVED_ICAL_TIMEZONE) {
+    calendarProperties.push(['x-wr-timezone', {}, 'text', RESOLVED_ICAL_TIMEZONE]);
+  }
+
+  const startSeconds = secondsFromTimeStr(options.startAt);
+  const endSeconds = secondsFromTimeStr(options.endAt);
+
+  const components: JCalComponent[] = entries.map((entry) => {
+    const baseDate = new Date(entry.y, entry.m - 1, entry.d);
+    const startDate = addSeconds(baseDate, startSeconds);
+    const eventSummary = options.summary ?? `第${entry.num} ${WEEK_NAME_JA[WDAYS[entry.wday]]}曜日`;
+
+    const eventProperties: JCalProperty[] = [];
+    const tzParams = RESOLVED_ICAL_TIMEZONE ? { tzid: RESOLVED_ICAL_TIMEZONE } : undefined;
+
+    eventProperties.push(['dtstart', tzParams ? { ...tzParams } : {}, 'date-time', formatDateTimeForJcal(startDate)]);
+
+    if (options.endAt) {
+      const endDate = addSeconds(baseDate, endSeconds);
+      eventProperties.push(['dtend', tzParams ? { ...tzParams } : {}, 'date-time', formatDateTimeForJcal(endDate)]);
+    } else {
+      eventProperties.push(['duration', {}, 'duration', 'P1D']);
+    }
+
+    eventProperties.push(['summary', {}, 'text', eventSummary]);
+
+    return ['vevent', eventProperties, []];
+  });
+
+  const jCal: JCalData = ['vcalendar', calendarProperties, components];
+  const component = ICAL.Component.fromJSON(jCal);
+  return component.toString();
+}
+
+function buildCsv(entries: WeekEntry[]): string {
+  const lines = ['date,wday,num'];
+  for (const entry of entries) {
+    lines.push(`${entry.date},${entry.wday},${entry.num}`);
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+function buildJs(entries: WeekEntry[]): string {
+  const json = JSON.stringify(entries);
+  return `export const json = ${json};\nexport function next(hour = 9, min = 0) {\n  return json.find((j) => Date.now() < new Date(j.date).setHours(hour, min));\n}\nexport default json;\n`;
+}
+
+function buildHtml(entries: WeekEntry[], title: string): string {
+  const escapedTitle = escapeHtml(title);
+  const rows = entries
+    .map(
+      (entry) =>
+        `<tr><td>${entry.date}</td><td>${entry.num}</td><td>${WEEK_NAME_JA[WDAYS[entry.wday]]}</td></tr>`,
+    )
+    .join('');
+  return `<!doctype html><html><head><title>${escapedTitle}</title><style>table {border: solid 1px}</style></head><body><h1>${escapedTitle}</h1><p>Ctrl+A, Ctrl+C で表全体をコピーすると、スプレッドシートに貼り付けることができます。</p><table border>${rows}</table></body></html>`;
+}
+
+export function handleWeekRequest({ query, slugSegments = [] }: WeekHandlerRequest): WeekHandlerResponse {
+  const parsed = parseRequest(query, slugSegments);
+
+  if (!parsed) {
+    return {
+      status: 404,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      body: "<script>console.log('error')</script>",
+    };
+  }
+
+  if ('redirectTo' in parsed) {
+    return {
+      status: 302,
+      headers: {
+        'Cache-Control': parsed.cacheControl,
+        Location: parsed.redirectTo,
+      },
+    };
+  }
+
+  const { format, year, nums, wdays } = parsed;
+  const entries = weekArrayForYearAround(year, wdays, nums);
+  const title = buildTitle(year, nums, wdays);
+
+  const baseHeaders: Record<string, string> = {
+    'Cache-Control': CACHE_CONTROL_VALUE,
+  };
+
+  switch (format) {
+    case 'json':
+      return {
+        status: 200,
+        headers: {
+          ...baseHeaders,
+          'Content-Type': 'application/json; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: JSON.stringify(entries),
+      };
+    case 'js':
+      return {
+        status: 200,
+        headers: {
+          ...baseHeaders,
+          'Content-Type': 'application/javascript; charset=utf-8',
+          'Access-Control-Allow-Origin': '*',
+        },
+        body: buildJs(entries),
+      };
+    case 'csv':
+      return {
+        status: 200,
+        headers: {
+          ...baseHeaders,
+          'Content-Type': 'text/plain; charset=utf-8',
+        },
+        body: buildCsv(entries),
+      };
+    case 'ical':
+      return {
+        status: 200,
+        headers: {
+          ...baseHeaders,
+          'Content-Type': 'text/calendar; charset=utf-8',
+        },
+        body: buildIcal(entries, parsed, title),
+      };
+    case 'html':
+      return {
+        status: 200,
+        headers: {
+          ...baseHeaders,
+          'Content-Type': 'text/html; charset=utf-8',
+        },
+        body: buildHtml(entries, title),
+      };
+    default:
+      return {
+        status: 404,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        body: "<script>console.log('error')</script>",
+      };
+  }
+}
+
+export { buildCsv, buildHtml, buildIcal, buildJs, buildTitle, weekArrayForYearAround };

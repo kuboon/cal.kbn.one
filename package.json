@@ -2,10 +2,17 @@
   "private": true,
   "license": "MIT",
   "scripts": {
-    "test": "cd api; bundle exec rspec .",
-    "build": "pug src/index.pug --out public"
+    "test": "npm run typecheck",
+    "build": "pug src/index.pug --out public",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "pug-cli": "Zikovic/pug-cli"
+    "@types/node": "^20.12.7",
+    "@vercel/node": "^3.2.20",
+    "pug-cli": "^1.0.0-alpha6",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "ical.js": "^2.2.1"
   }
 }

@@ -1,15 +1,6 @@
 {
   "version": 2,
   "env": {},
-  "functions": {
-    "api/*.ru": {
-      "runtime": "@vercel/ruby@2.0.5"
-    }
-  },
   "cleanUrls": true,
-  "trailingSlash": false,
-  "rewrites": [
-    { "source": "/api/week/:year/:num/:wday", "destination": "/api/week" },
-    { "source": "/api/week/:year/:num/:wday(.:format)?", "destination": "/api/week" }
-  ]
+  "trailingSlash": false
 }
