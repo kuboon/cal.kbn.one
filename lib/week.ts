@@ -258,6 +258,8 @@ function formatDateTimeForJcal(date: Date): string {
   );
 }
 
+type ResponseBuilder = (entries: WeekEntry[], options: WeekOptions, title: string) => string;
+
 function buildIcal(entries: WeekEntry[], options: WeekOptions, title: string): string {
   const calendarProperties: JCalProperty[] = [
     ['prodid', {}, 'text', '-//cal.kbn.one//week//JA'],
@@ -323,15 +325,44 @@ function buildHtml(entries: WeekEntry[], title: string): string {
   return `<!doctype html><html><head><title>${escapedTitle}</title><style>table {border: solid 1px}</style></head><body><h1>${escapedTitle}</h1><p>Ctrl+A, Ctrl+C で表全体をコピーすると、スプレッドシートに貼り付けることができます。</p><table border>${rows}</table></body></html>`;
 }
 
+const SUCCESS_RESPONSE_BUILDERS: Record<Format, { contentType: string; buildBody: ResponseBuilder; headers?: Record<string, string> }> = {
+  json: {
+    contentType: 'application/json; charset=utf-8',
+    headers: { 'Access-Control-Allow-Origin': '*' },
+    buildBody: (entries) => JSON.stringify(entries),
+  },
+  js: {
+    contentType: 'application/javascript; charset=utf-8',
+    headers: { 'Access-Control-Allow-Origin': '*' },
+    buildBody: (entries) => buildJs(entries),
+  },
+  csv: {
+    contentType: 'text/plain; charset=utf-8',
+    buildBody: (entries) => buildCsv(entries),
+  },
+  ical: {
+    contentType: 'text/calendar; charset=utf-8',
+    buildBody: (entries, options, title) => buildIcal(entries, options, title),
+  },
+  html: {
+    contentType: 'text/html; charset=utf-8',
+    buildBody: (entries, _options, title) => buildHtml(entries, title),
+  },
+};
+
+function notFoundResponse(): WeekHandlerResponse {
+  return {
+    status: 404,
+    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    body: "<script>console.log('error')</script>",
+  };
+}
+
 export function handleWeekRequest({ query, slugSegments = [] }: WeekHandlerRequest): WeekHandlerResponse {
   const parsed = parseRequest(query, slugSegments);
 
   if (!parsed) {
-    return {
-      status: 404,
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
-      body: "<script>console.log('error')</script>",
-    };
+    return notFoundResponse();
   }
 
   if ('redirectTo' in parsed) {
@@ -348,65 +379,27 @@ export function handleWeekRequest({ query, slugSegments = [] }: WeekHandlerReque
   const entries = weekArrayForYearAround(year, wdays, nums);
   const title = buildTitle(year, nums, wdays);
 
+  const responseBuilder = SUCCESS_RESPONSE_BUILDERS[format];
+
+  if (!responseBuilder) {
+    return notFoundResponse();
+  }
+
   const baseHeaders: Record<string, string> = {
     'Cache-Control': CACHE_CONTROL_VALUE,
   };
 
-  switch (format) {
-    case 'json':
-      return {
-        status: 200,
-        headers: {
-          ...baseHeaders,
-          'Content-Type': 'application/json; charset=utf-8',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: JSON.stringify(entries),
-      };
-    case 'js':
-      return {
-        status: 200,
-        headers: {
-          ...baseHeaders,
-          'Content-Type': 'application/javascript; charset=utf-8',
-          'Access-Control-Allow-Origin': '*',
-        },
-        body: buildJs(entries),
-      };
-    case 'csv':
-      return {
-        status: 200,
-        headers: {
-          ...baseHeaders,
-          'Content-Type': 'text/plain; charset=utf-8',
-        },
-        body: buildCsv(entries),
-      };
-    case 'ical':
-      return {
-        status: 200,
-        headers: {
-          ...baseHeaders,
-          'Content-Type': 'text/calendar; charset=utf-8',
-        },
-        body: buildIcal(entries, parsed, title),
-      };
-    case 'html':
-      return {
-        status: 200,
-        headers: {
-          ...baseHeaders,
-          'Content-Type': 'text/html; charset=utf-8',
-        },
-        body: buildHtml(entries, title),
-      };
-    default:
-      return {
-        status: 404,
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
-        body: "<script>console.log('error')</script>",
-      };
-  }
+  const { contentType, buildBody, headers } = responseBuilder;
+
+  return {
+    status: 200,
+    headers: {
+      ...baseHeaders,
+      'Content-Type': contentType,
+      ...(headers ?? {}),
+    },
+    body: buildBody(entries, parsed, title),
+  };
 }
 
 export { buildCsv, buildHtml, buildIcal, buildJs, buildTitle, weekArrayForYearAround };
