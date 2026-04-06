@@ -187,14 +187,14 @@ html(lang="ja")
           span.form-label iCal オプション
           .ical-section
             .field.full
-              label 予定名
-              input(name="summary" placeholder="例: 定例ミーティング")
+              label(for="ical-summary") 予定名
+              input(name="summary" id="ical-summary" placeholder="例: 定例ミーティング")
             .field
-              label 開始時刻
-              input(name="start_at" value="8:00")
+              label(for="ical-start") 開始時刻
+              input(name="start_at" id="ical-start" value="8:00")
             .field
-              label 終了時刻
-              input(name="end_at" value="8:00")
+              label(for="ical-end") 終了時刻
+              input(name="end_at" id="ical-end" value="8:00")
 
         .form-section
           button(type="submit") 取得する
